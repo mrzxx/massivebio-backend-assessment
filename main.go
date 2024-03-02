@@ -1,10 +1,19 @@
 package main
 
 import (
-	_ "github.com/lib/pq"
+	"massivebio/controllers"
+	"massivebio/database"
+	"net/http"
 )
 
-// CONNECT DB AND INIT..
 func main() {
-	database.setupDB()
+	//Init Database
+	database.ConnectDB()
+	defer database.DB.Close()
+
+	//Routes
+	http.HandleFunc("/assignment/query", controllers.MassiveFilter)
+
+	//Run Server
+	http.ListenAndServe(":8080", nil)
 }
