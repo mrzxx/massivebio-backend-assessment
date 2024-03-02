@@ -8,6 +8,7 @@ import (
 	"massivebio/models"
 	"massivebio/utils"
 	"net/http"
+	"reflect"
 	"strings"
 )
 
@@ -78,14 +79,28 @@ func MassiveFilter(w http.ResponseWriter, r *http.Request) {
 		// filters:{}
 		var args []interface{}
 		var whereClauses []string
+		argCounter := 1
 		for col, value := range req.Filters {
 			if !models.AllowedColumns[col] {
 				utils.SendJSONError(w, "Invalid column in filters", http.StatusBadRequest)
 				return
 			}
-			whereClause := fmt.Sprintf("%s = $%d", col, len(args)+1)
-			whereClauses = append(whereClauses, whereClause)
-			args = append(args, value)
+
+			valueKind := reflect.TypeOf(value).Kind()
+			if valueKind == reflect.Slice || valueKind == reflect.Array {
+				placeholders := []string{}
+				valSlice := reflect.ValueOf(value)
+				for i := 0; i < valSlice.Len(); i++ {
+					placeholders = append(placeholders, fmt.Sprintf("$%d", argCounter))
+					args = append(args, valSlice.Index(i).Interface())
+					argCounter++
+				}
+				whereClauses = append(whereClauses, fmt.Sprintf("%s IN (%s)", col, strings.Join(placeholders, ",")))
+			} else {
+				whereClauses = append(whereClauses, fmt.Sprintf("%s = $%d", col, argCounter))
+				args = append(args, value)
+				argCounter++
+			}
 		}
 
 		// ordering:[]
