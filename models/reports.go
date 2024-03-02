@@ -12,3 +12,33 @@ type Report struct {
 	LinksMondo            string   `json:"links_mondo"`
 	LinksPhenoPubmed      string   `json:"links_pheno_pubmed"`
 }
+
+type FilterRequest struct {
+	Filters  map[string]interface{} `json:"filters"`
+	Ordering []map[string]string    `json:"ordering"`
+}
+type Response struct {
+	Page     int      `json:"page"`
+	PageSize int      `json:"page_size"`
+	Count    int      `json:"count"`
+	Results  []Report `json:"results"`
+}
+
+// Security
+var AllowedColumns = map[string]bool{
+	"main_uploaded_variation": true,
+	"main_existing_variation": true,
+	"main_symbol":             true,
+	"main_af_vcf":             true,
+	"main_dp":                 true,
+	"details2_provean":        true,
+	"details2_dann_score":     true,
+	"links_mondo":             true,
+	"links_pheno_pubmed":      true,
+	"row":                     true,
+}
+
+var AllowedDirections = map[string]bool{
+	"ASC":  true,
+	"DESC": true,
+}
