@@ -12,10 +12,10 @@ import (
 )
 
 func MassiveFilter(w http.ResponseWriter, r *http.Request) {
-	// Just for Pagination without filter (only GET)
+	// Just for Pagination without filter (only GET)------------
 
 	if r.Method == http.MethodGet {
-
+		//GET METHOD---------------------------------------------------------
 		// 'page' ve 'page_size' control (not allowed string and negative numbers)
 		// Show page (def:1)
 		page, err := utils.ValidateQueryParam(r, "page", 1)
@@ -30,7 +30,6 @@ func MassiveFilter(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// Show DATA
 		offset := (page - 1) * pageSize
 		query := "SELECT * FROM report_output ORDER BY row ASC LIMIT $1 OFFSET $2"
 
@@ -65,7 +64,8 @@ func MassiveFilter(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(reports)
 
 	} else if r.Method == http.MethodPost {
-		// Pagination + Filter (post + get)
+		//POST METHOD---------------------------------------------------------
+		// Pagination + Filter (post + get)----------
 
 		// FilterRequest, represents incoming data
 		type FilterRequest struct {
@@ -96,6 +96,12 @@ func MassiveFilter(w http.ResponseWriter, r *http.Request) {
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			utils.SendJSONError(w, "400 - Bad Request", http.StatusBadRequest)
 			return
+		}
+		type Response struct {
+			Page     int             `json:"page"`
+			PageSize int             `json:"page_size"`
+			Count    int             `json:"count"`
+			Results  []models.Report `json:"results"`
 		}
 
 		// filters:{}
@@ -135,12 +141,36 @@ func MassiveFilter(w http.ResponseWriter, r *http.Request) {
 			order = "ORDER BY " + strings.Join(orderClauses, ", ")
 		}
 
+		// 'page' ve 'page_size' control (not allowed string and negative numbers)
+		// Show page (def:1)
+		page, err := utils.ValidateQueryParam(r, "page", 1)
+		if err != nil || page < 1 {
+			utils.SendJSONError(w, "Invalid 'page' query parameter", http.StatusBadRequest)
+			return
+		}
+		// Show data per page (def:10)
+		pageSize, err := utils.ValidateQueryParam(r, "page_size", 10)
+		if err != nil || pageSize <= 0 {
+			utils.SendJSONError(w, "Invalid 'page_size' query parameter", http.StatusBadRequest)
+			return
+		}
+
+		//Total Records
+		countQuery := fmt.Sprintf("SELECT COUNT(*) FROM report_output %s", where)
+		var totalRecords int
+		queryTotalNumber := database.DB.QueryRow(countQuery, args...)
+		queryTotalNumber.Scan(&totalRecords)
+		if queryTotalNumber.Err() != nil {
+			utils.SendJSONError(w, "Database query error: Cannot get total record count", http.StatusInternalServerError)
+			return
+		}
 		// Create Query
-		query := fmt.Sprintf("SELECT * FROM report_output %s %s;", where, order)
+		//query := fmt.Sprintf("SELECT * FROM report_output %s %s", where, order)
+		offset := (page - 1) * pageSize
+		query := fmt.Sprintf("SELECT * FROM report_output %s %s LIMIT $%d OFFSET $%d", where, order, len(args)+1, len(args)+2)
+		args = append(args, pageSize, offset)
 
 		// Response
-
-		// First get data from database
 		rows, err := database.DB.Query(query, args...)
 		if err != nil {
 			utils.SendJSONError(w, err.Error(), http.StatusInternalServerError)
@@ -163,9 +193,20 @@ func MassiveFilter(w http.ResponseWriter, r *http.Request) {
 			reports = append(reports, report)
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(reports)
+		if len(reports) == 0 {
+			utils.SendJSONError(w, "No records found for the requested page.", http.StatusNotFound)
+			return
+		}
 
+		response := Response{
+			Page:     page,
+			PageSize: pageSize,
+			Count:    totalRecords,
+			Results:  reports,
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response)
 	}
 
 }
